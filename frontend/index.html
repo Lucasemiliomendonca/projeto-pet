@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RG de Pets</title>
+<link rel="stylesheet" href="style.css">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#ff6f61">
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('service-worker.js')
+        .then(reg => console.log('Service Worker registrado:', reg))
+        .catch(err => console.log('Falha no Service Worker:', err));
+    });
+  }
+</script>
+</head>
+<body>
+
+<header>
+    <h1>🐾 RG de Pets</h1>
+    <p>Identifique cães e gatos pela íris e encontre o dono rapidamente!</p>
+</header>
+
+<main>
+    <section id="cadastro" class="card">
+        <h2>Cadastro do Pet</h2>
+        <form id="formCadastro">
+            <input type="text" name="nome_pet" placeholder="Nome do pet" required>
+            <input type="text" name="especie" placeholder="Espécie (cão/gato)" required>
+            <input type="text" name="raca" placeholder="Raça" required>
+            <input type="number" name="idade" placeholder="Idade" required>
+            <input type="text" name="nome_dono" placeholder="Nome do dono" required>
+            <input type="text" name="telefone" placeholder="Telefone" required>
+            <input type="email" name="email" placeholder="Email" required>
+            <input type="file" name="file" accept="image/*" capture="environment" required>
+            <button type="submit">Cadastrar Pet</button>
+        </form>
+        <p id="resCadastro"></p>
+        <img id="qrCadastro" src="" alt="QR Code do pet" style="display:none;">
+    </section>
+
+    <section id="identificacao" class="card">
+        <h2>Identificar Pet Perdido</h2>
+        <form id="formIdentificacao">
+            <input type="file" name="file" accept="image/*" capture="environment" required>
+            <input type="text" name="chave" placeholder="Chave de acesso (QR Code)" required>
+            <button type="submit">Identificar Pet</button>
+        </form>
+        <p id="resIdentificacao"></p>
+    </section>
+</main>
+
+<footer>
+    <p>Desenvolvido com ❤️ para encontrar pets perdidos</p>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>
