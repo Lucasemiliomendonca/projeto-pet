@@ -1,62 +1,74 @@
 <!DOCTYPE html>
 <html lang="pt-br">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>RG de Pets</title>
-<link rel="stylesheet" href="style.css">
-<link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#ff6f61">
-<script>
-  if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-      navigator.serviceWorker.register('service-worker.js')
-        .then(reg => console.log('Service Worker registrado:', reg))
-        .catch(err => console.log('Falha no Service Worker:', err));
-    });
-  }
-</script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pet-ID</title>
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-<header>
-    <h1>🐾 RG de Pets</h1>
-    <p>Identifique cães e gatos pela íris e encontre o dono rapidamente!</p>
-</header>
+    <header>
+        <h1>Pet-ID</h1>
+    </header>
 
-<main>
-    <section id="cadastro" class="card">
-        <h2>Cadastro do Pet</h2>
-        <form id="formCadastro">
-            <input type="text" name="nome_pet" placeholder="Nome do pet" required>
-            <input type="text" name="especie" placeholder="Espécie (cão/gato)" required>
-            <input type="text" name="raca" placeholder="Raça" required>
-            <input type="number" name="idade" placeholder="Idade" required>
-            <input type="text" name="nome_dono" placeholder="Nome do dono" required>
-            <input type="text" name="telefone" placeholder="Telefone" required>
-            <input type="email" name="email" placeholder="Email" required>
-            <input type="file" name="file" accept="image/*" capture="environment" required>
-            <button type="submit">Cadastrar Pet</button>
-        </form>
-        <p id="resCadastro"></p>
-        <img id="qrCadastro" src="" alt="QR Code do pet" style="display:none;">
-    </section>
+    <main>
+        <div id="login-view" class="view active">
+            <div class="card">
+                <h2>Login</h2>
+                <form id="login-form">
+                    <input type="email" name="username" placeholder="Email" required>
+                    <input type="password" name="password" placeholder="Senha" required>
+                    <button type="submit">Entrar</button>
+                </form>
+                <p id="login-error" class="error-message"></p>
+                <a href="#" id="show-register">Não tem uma conta? Cadastre-se</a>
+            </div>
+        </div>
 
-    <section id="identificacao" class="card">
-        <h2>Identificar Pet Perdido</h2>
-        <form id="formIdentificacao">
-            <input type="file" name="file" accept="image/*" capture="environment" required>
-            <input type="text" name="chave" placeholder="Chave de acesso (QR Code)" required>
-            <button type="submit">Identificar Pet</button>
-        </form>
-        <p id="resIdentificacao"></p>
-    </section>
-</main>
+        <div id="register-view" class="view">
+            <div class="card">
+                <h2>Cadastro</h2>
+                <form id="register-form">
+                    <input type="text" name="nome" placeholder="Seu Nome" required>
+                    <input type="email" name="email" placeholder="Email" required>
+                    <input type="password" name="senha" placeholder="Senha" required>
+                    <button type="submit">Cadastrar</button>
+                </form>
+                <p id="register-error" class="error-message"></p>
+                <a href="#" id="show-login">Já tem uma conta? Faça o login</a>
+            </div>
+        </div>
 
-<footer>
-    <p>Desenvolvido com ❤️ para encontrar pets perdidos</p>
-</footer>
+        <div id="dashboard-view" class="view">
+            <div class="user-info">
+                <p>Bem-vindo(a), <span id="user-name"></span>!</p>
+                <button id="logout-button">Sair</button>
+            </div>
 
-<script src="app.js"></script>
+            <div class="card">
+                <h2>Cadastrar Novo Pet</h2>
+                <form id="add-pet-form">
+                    <input type="text" name="nome" placeholder="Nome do Pet" required>
+                    <input type="text" name="especie" placeholder="Espécie (Cão/Gato)" required>
+                    <input type="text" name="raca" placeholder="Raça" required>
+                    <input type="number" name="idade" placeholder="Idade" required>
+                    <label for="pet-photo">Foto do Pet:</label>
+                    <input type="file" id="pet-photo" name="file" accept="image/*" required>
+                    <button type="submit">Cadastrar Pet</button>
+                </form>
+                 <p id="pet-success" class="success-message"></p>
+            </div>
+
+            <div class="card">
+                <h2>Meus Pets</h2>
+                <div id="my-pets-list">
+                    <p>Você ainda não tem pets cadastrados.</p>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script src="app.js"></script>
 </body>
 </html>

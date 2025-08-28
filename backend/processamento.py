@@ -1,43 +1,33 @@
-import cv2
-import numpy as np
 from PIL import Image
 import torch
-import torch.nn as nn
 import torchvision.transforms as transforms
+import torchvision.models as models
+import torch.nn as nn
 
-# CNN simples para extrair vetor da íris
-class IrisCNN(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.conv = nn.Sequential(
-            nn.Conv2d(1, 16, 3, padding=1),
-            nn.ReLU(),
-            nn.MaxPool2d(2),
-            nn.Conv2d(16, 32, 3, padding=1),
-            nn.ReLU(),
-            nn.MaxPool2d(2)
-        )
-        self.fc = nn.Linear(32*16*16, 128)  # vetor de 128 dimensões
-
-    def forward(self, x):
-        x = self.conv(x)
-        x = x.view(x.size(0), -1)
-        x = self.fc(x)
-        x = nn.functional.normalize(x, p=2, dim=1)
-        return x
-
-# Instancia o modelo
-model = IrisCNN()
+model = models.resnet18(pretrained=True)
+model = nn.Sequential(*list(model.children())[:-1])
 model.eval()
 
-def extrair_vetor_cnn(caminho_imagem):
-    # Carrega imagem e converte para escala de cinza
-    img = Image.open(caminho_imagem).convert('L')
-    transform = transforms.Compose([
-        transforms.Resize((64,64)),
-        transforms.ToTensor()
-    ])
-    x = transform(img).unsqueeze(0)
-    with torch.no_grad():
-        vetor = model(x).numpy()[0]
-    return ','.join(map(str, vetor))
+transform = transforms.Compose([
+    transforms.Resize(256),
+    transforms.CenterCrop(224),
+    transforms.ToTensor(),
+    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+])
+
+def extrair_vetor(caminho_imagem):
+    try:
+        img = Image.open(caminho_imagem).convert("RGB")
+        img_t = transform(img)
+        batch_t = torch.unsqueeze(img_t, 0)
+        
+        with torch.no_grad():
+            vetor = model(batch_t)
+        vetor_plano = torch.flatten(vetor).numpy()
+        
+        return ','.join(map(str, vetor))
+    
+    except Exception as e:
+        print(f"Erro ao processar a imagem: {e}")
+        return None
+    

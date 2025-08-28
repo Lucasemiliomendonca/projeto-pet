@@ -1,103 +1,213 @@
-from fastapi import FastAPI, UploadFile, File, Form
-from fastapi.responses import FileResponse
-import os, secrets
+from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File, Form
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from pydantic import BaseModel
+from typing import List, Optional
+import sqlite3
+from passlib.context import CryptContext
+from jose import JWTError, jwt
+import os
+import secrets
 from banco import criar_banco, conectar
-from processamento import extrair_vetor_cnn
-import qrcode
+from processamento import extrair_vetor
+from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File, Form
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles # <- IMPORTAR ISSO
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+
+SECRET_KEY = "qR8zW9nX7jH3uL5tB2oF6mV1cY0pK4dS8aE7rN6gU5wJ3iT9lZ2vM8yQ1xC4hA"
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+
+# --- Modelos Pydantic (validação de dados) ---
+class UsuarioCreate(BaseModel):
+    nome: str
+    email: str
+    senha: str
+
+class Usuario(BaseModel):
+    id: int
+    nome: str
+    email: str
+
+class Pet(BaseModel):
+    id: int
+    dono_id: int
+    nome: str
+    especie: Optional[str] = None
+    raca: Optional[str] = None
+    idade: Optional[int] = None
+    foto_url: Optional[str] = None
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+
+# =================================================================
+# 3. FUNÇÕES AUXILIARES DE SEGURANÇA
+# =================================================================
+
+def verificar_senha(senha_plana, senha_hash):
+    return pwd_context.verify(senha_plana, senha_hash)
+
+def get_senha_hash(senha):
+    return pwd_context.hash(senha)
+
+def criar_access_token(data: dict):
+    to_encode = data.copy()
+    # Adicionar expiração aqui se desejar
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+
+async def get_current_user(token: str = Depends(oauth2_scheme)):
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        email: str = payload.get("sub")
+        if email is None:
+            raise credentials_exception
+    except JWTError:
+        raise credentials_exception
+    
+    conn = conectar()
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM usuarios WHERE email = ?", (email,))
+    user = cursor.fetchone()
+    conn.close()
+
+    if user is None:
+        raise credentials_exception
+    return Usuario(**user)
+
+# =================================================================
+# 4. INICIALIZAÇÃO DO APP E ENDPOINTS
+# =================================================================
 
 app = FastAPI()
+app.mount("/static", StaticFiles(directory="imagens_pets"), name="static")
+
+# --- CORS ---
+# Permite que o frontend (rodando em outra porta/endereço) acesse a API
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"], # Em produção, troque por ["http://seu-dominio.com"]
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# --- Evento de Startup ---
+@app.on_event("startup")
+def on_startup():
+    criar_banco()
+    os.makedirs("imagens_pets", exist_ok=True)
+
+
+# --- Endpoint Raiz ---
 @app.get("/")
 def raiz():
-    return {"mensagem": "API do Pet Iris rodando! 🐶🐱👁️"}
+    return {"mensagem": "Funcionando!"}
 
-criar_banco()
-os.makedirs("imagens", exist_ok=True)
+# --- Endpoints de Autenticação ---
+@app.post("/usuarios", response_model=Usuario, status_code=status.HTTP_201_CREATED)
+def criar_usuario(usuario: UsuarioCreate):
+    conn = conectar()
+    cursor = conn.cursor()
+    senha_hash = get_senha_hash(usuario.senha)
+    try:
+        cursor.execute(
+            "INSERT INTO usuarios (nome, email, senha_hash) VALUES (?, ?, ?)",
+            (usuario.nome, usuario.email, senha_hash)
+        )
+        conn.commit()
+        user_id = cursor.lastrowid
+    except sqlite3.IntegrityError:
+        raise HTTPException(status_code=400, detail="Email já cadastrado")
+    finally:
+        conn.close()
+    return {"id": user_id, "nome": usuario.nome, "email": usuario.email}
 
-# Cadastro de pet
-@app.post("/cadastrar_pet")
+@app.post("/token", response_model=Token)
+async def login_para_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
+    conn = conectar()
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM usuarios WHERE email = ?", (form_data.username,))
+    user = cursor.fetchone()
+    conn.close()
+
+    if not user or not verificar_senha(form_data.password, user["senha_hash"]):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Email ou senha incorretos",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    access_token = criar_access_token(data={"sub": user["email"]})
+    return {"access_token": access_token, "token_type": "bearer"}
+
+
+# --- Endpoints de Pets (Protegidos) ---
+
+@app.post("/pets", response_model=Pet, status_code=status.HTTP_201_CREATED)
 async def cadastrar_pet(
-    nome_pet: str = Form(...),
+    nome: str = Form(...),
     especie: str = Form(...),
     raca: str = Form(...),
     idade: int = Form(...),
-    nome_dono: str = Form(...),
-    telefone: str = Form(...),
-    email: str = Form(...),
-    file: UploadFile = File(...)
+    file: UploadFile = File(...),
+    current_user: Usuario = Depends(get_current_user)
 ):
-    caminho_imagem = f"imagens/{file.filename}"
+    # Salva a imagem
+    file_extension = file.filename.split(".")[-1]
+    file_name = f"{secrets.token_hex(8)}.{file_extension}"
+    caminho_imagem = f"imagens_pets/{file_name}"
+
     with open(caminho_imagem, "wb") as f:
         f.write(await file.read())
 
-    vetor = extrair_vetor_cnn(caminho_imagem)
-    chave_acesso = secrets.token_hex(8)
+    # Extrai o vetor da imagem
+    vetor_iris = extrair_vetor(caminho_imagem)
+    if not vetor_iris:
+        raise HTTPException(status_code=500, detail="Não foi possível processar a imagem do pet.")
 
+    # Salva o pet no banco de dados
     conn = conectar()
     cursor = conn.cursor()
-    cursor.execute("""
-        INSERT INTO pets (nome, especie, raca, idade, vetor_iris, dono_nome, telefone, email, chave_acesso)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """, (nome_pet, especie, raca, idade, vetor, nome_dono, telefone, email, chave_acesso))
-    pet_id = cursor.lastrowid
+    cursor.execute(
+        """
+        INSERT INTO pets (dono_id, nome, especie, raca, idade, vetor_iris, foto_url)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        (current_user.id, nome, especie, raca, idade, vetor_iris, file_name)
+    )
     conn.commit()
+    pet_id = cursor.lastrowid
     conn.close()
 
-    # Gera QR Code
-    qr = qrcode.QRCode(version=1, box_size=10, border=5)
-    qr.add_data(f"PET_ID:{pet_id}|CHAVE:{chave_acesso}")
-    qr.make(fit=True)
-    img_qr = qr.make_image(fill='black', back_color='white')
-    qr_path = f"imagens/qr_{pet_id}.png"
-    img_qr.save(qr_path)
+    return {
+        "id": pet_id, "dono_id": current_user.id, "nome": nome, "especie": especie,
+        "raca": raca, "idade": idade, "foto_url": caminho_imagem,
+        "foto_url": file_name
+    }
 
-    return {"status":"ok", "pet_id":pet_id, "chave_acesso":chave_acesso}
-
-# Pega QR Code
-@app.get("/qr/{pet_id}")
-def pegar_qr(pet_id: int):
-    qr_path = f"imagens/qr_{pet_id}.png"
-    if os.path.exists(qr_path):
-        return FileResponse(qr_path, media_type="image/png")
-    return {"status":"erro","mensagem":"QR Code não encontrado"}
-
-# Identificação do pet perdido
-@app.post("/identificar_pet")
-async def identificar_pet(file: UploadFile = File(...), chave: str = Form(...)):
-    caminho_imagem = f"imagens/temp_{file.filename}"
-    with open(caminho_imagem, "wb") as f:
-        f.write(await file.read())
-
-    vetor_input = extrair_vetor_cnn(caminho_imagem)
-    vetor_input = list(map(float, vetor_input.split(',')))
-
+@app.get("/pets", response_model=List[Pet])
+async def listar_meus_pets(current_user: Usuario = Depends(get_current_user)):
     conn = conectar()
+    conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM pets")
-    pets = cursor.fetchall()
+    cursor.execute("SELECT * FROM pets WHERE dono_id = ?", (current_user.id,))
+    pets_rows = cursor.fetchall()
     conn.close()
 
-    melhor_sim = 0
-    pet_encontrado = None
-
-    for pet in pets:
-        vetor_pet = list(map(float, pet[5].split(',')))
-        # Similaridade cosseno
-        dot = sum([vetor_pet[i]*vetor_input[i] for i in range(len(vetor_pet))])
-        norm_pet = sum([v**2 for v in vetor_pet])**0.5
-        norm_input = sum([v**2 for v in vetor_input])**0.5
-        sim = dot/(norm_pet*norm_input)
-        if sim > melhor_sim:
-            melhor_sim = sim
-            pet_encontrado = pet
-
-    if pet_encontrado and melhor_sim > 0.8:
-        if chave != pet_encontrado[9]:  # coluna chave_acesso
-            return {"status":"erro","mensagem":"Chave de acesso inválida"}
-        return {
-            "status":"ok",
-            "nome_pet":pet_encontrado[1],
-            "dono":{"nome":pet_encontrado[6],"telefone":pet_encontrado[7],"email":pet_encontrado[8]},
-            "confianca":melhor_sim
-        }
-
-    return {"status":"erro","mensagem":"Pet não encontrado"}
+    # AQUI ESTÁ A CORREÇÃO:
+    # Converte a lista de 'sqlite3.Row' em uma lista de dicionários.
+    pets = [dict(row) for row in pets_rows]
+    return pets
