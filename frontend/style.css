@@ -134,3 +134,59 @@ a {
     object-fit: cover;
     border-radius: 50%;
 }
+
+textarea {
+    padding: 0.8rem;
+    border: 1px solid #ccc;
+    border-radius: var(--border-radius);
+    font-size: 1rem;
+    font-family: inherit;
+    min-height: 80px;
+    resize: vertical;
+}
+
+select {
+    padding: 0.8rem;
+    border: 1px solid #ccc;
+    border-radius: var(--border-radius);
+    font-size: 1rem;
+    background-color: white;
+}
+
+.post-card {
+    background-color: #fff;
+    border: 1px solid #dbdbdb;
+    border-radius: var(--border-radius);
+    margin-bottom: 1.5rem;
+    box-shadow: var(--box-shadow);
+}
+
+.post-header {
+    padding: 1rem;
+    font-weight: 600;
+}
+
+.user-name, .pet-name {
+    color: var(--primary-color);
+}
+
+.post-image {
+    width: 100%;
+    height: auto;
+    display: block;
+}
+
+.post-caption {
+    padding: 1rem;
+}
+
+.link-secundario {
+    display: block;
+    text-align: center;
+    margin-top: 1.5rem;
+    font-size: 0.9rem;
+    color: #555;
+}
+#identification-result {
+    margin-top: 1.5rem;
+}

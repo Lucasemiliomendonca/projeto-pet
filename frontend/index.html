@@ -23,6 +23,7 @@
                 </form>
                 <p id="login-error" class="error-message"></p>
                 <a href="#" id="show-register">Não tem uma conta? Cadastre-se</a>
+                <a href="#" id="show-identification" class="link-secundario">Encontrou um pet perdido? Identifique-o aqui</a>
             </div>
         </div>
 
@@ -40,10 +41,38 @@
             </div>
         </div>
 
+        <div id="identification-view" class="view">
+            <div class="card">
+                <h2>Identificar Pet Perdido</h2>
+                <p>Envie uma foto nítida do rosto do pet que você encontrou.</p>
+                <form id="identification-form">
+                    <input type="file" name="file" accept="image/*" required>
+                    <button type="button" id="identification-button">Identificar</button>
+                </form>
+                <div id="identification-result">
+                    </div>
+                <a href="#" id="back-to-login">Voltar para o Login</a>
+            </div>
+        </div>
+
         <div id="dashboard-view" class="view">
+            
             <div class="user-info">
                 <p>Bem-vindo(a), <span id="user-name"></span>!</p>
                 <button id="logout-button">Sair</button>
+            </div>
+
+            <div class="card">
+                <h2>Criar Novo Post</h2>
+                <form id="add-post-form">
+                    <label for="pet-select">Para qual pet?</label>
+                    <select name="pet_id" id="pet-select" required></select>
+                    <textarea name="descricao" placeholder="Escreva uma legenda..." required></textarea>
+                    <label for="post-photo">Foto do Post:</label>
+                    <input type="file" id="post-photo" name="file" accept="image/*" required>
+                    <button type="submit">Publicar</button>
+                </form>
+                <p id="post-success" class="success-message"></p>
             </div>
 
             <div class="card">
@@ -63,9 +92,15 @@
             <div class="card">
                 <h2>Meus Pets</h2>
                 <div id="my-pets-list">
-                    <p>Você ainda não tem pets cadastrados.</p>
-                </div>
+                    </div>
             </div>
+
+            <div class="feed-container">
+                <h2>Feed</h2>
+                <div id="feed-posts">
+                    </div>
+            </div>
+
         </div>
     </main>
 

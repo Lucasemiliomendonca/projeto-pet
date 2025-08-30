@@ -14,6 +14,8 @@ from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File, F
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles # <- IMPORTAR ISSO
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from datetime import datetime
+import numpy as np
 
 SECRET_KEY = "qR8zW9nX7jH3uL5tB2oF6mV1cY0pK4dS8aE7rN6gU5wJ3iT9lZ2vM8yQ1xC4hA"
 ALGORITHM = "HS256"
@@ -45,7 +47,25 @@ class Pet(BaseModel):
 class Token(BaseModel):
     access_token: str
     token_type: str
+    
+class PostResponse(BaseModel):
+    id: int
+    imagem_url: str
+    descricao: Optional[str] = None
+    timestamp: datetime
+    dono_nome: str
+    pet_nome: str    
 
+class DonoInfo(BaseModel):
+    nome: str
+    email: str
+    telefone: str # Você pode adicionar o telefone se quiser
+
+class IdentificacaoResponse(BaseModel):
+    status: str
+    pet_nome: str
+    confianca: float
+    dono: DonoInfo
 # =================================================================
 # 3. FUNÇÕES AUXILIARES DE SEGURANÇA
 # =================================================================
@@ -109,6 +129,7 @@ app.add_middleware(
 def on_startup():
     criar_banco()
     os.makedirs("imagens_pets", exist_ok=True)
+    os.makedirs("imagens_posts", exist_ok=True)
 
 
 # --- Endpoint Raiz ---
@@ -211,3 +232,124 @@ async def listar_meus_pets(current_user: Usuario = Depends(get_current_user)):
     # Converte a lista de 'sqlite3.Row' em uma lista de dicionários.
     pets = [dict(row) for row in pets_rows]
     return pets
+
+@app.post("/posts", status_code=status.HTTP_201_CREATED)
+async def criar_post(
+    pet_id: int = Form(...),
+    descricao: str = Form(...),
+    file: UploadFile = File(...),
+    current_user: Usuario = Depends(get_current_user)
+):
+    # Salva a imagem na pasta de posts
+    file_extension = file.filename.split(".")[-1]
+    file_name = f"{secrets.token_hex(10)}.{file_extension}"
+    caminho_imagem = f"imagens_posts/{file_name}"
+
+    with open(caminho_imagem, "wb") as f:
+        f.write(await file.read())
+    
+    # Insere o post no banco de dados
+    conn = conectar()
+    cursor = conn.cursor()
+    cursor.execute(
+        "INSERT INTO posts (usuario_id, pet_id, imagem_url, descricao) VALUES (?, ?, ?, ?)",
+        (current_user.id, pet_id, file_name, descricao)
+    )
+    conn.commit()
+    conn.close()
+
+    return {"status": "ok", "detail": "Post criado com sucesso"}
+
+@app.get("/feed", response_model=List[PostResponse])
+async def get_feed(current_user: Usuario = Depends(get_current_user)):
+    conn = conectar()
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+
+    # Query que busca os posts e junta com dados do usuário e do pet
+    cursor.execute("""
+        SELECT 
+            p.id, p.imagem_url, p.descricao, p.timestamp,
+            u.nome as dono_nome,
+            pet.nome as pet_nome
+        FROM posts p
+        JOIN usuarios u ON p.usuario_id = u.id
+        JOIN pets pet ON p.pet_id = pet.id
+        ORDER BY p.timestamp DESC
+    """)
+    posts_rows = cursor.fetchall()
+    conn.close()
+
+    # Converte as linhas do DB em dicionários
+    feed = [dict(row) for row in posts_rows]
+    return feed
+
+@app.post("/identificar_pet")
+async def identificar_pet(file: UploadFile = File(...)):
+    # 1. Salva a imagem temporariamente
+    temp_file_name = f"temp_{secrets.token_hex(8)}_{file.filename}"
+    caminho_imagem_temp = f"imagens_posts/{temp_file_name}"
+
+    with open(caminho_imagem_temp, "wb") as f:
+        f.write(await file.read())
+    
+    # 2. Extrai o vetor da imagem enviada
+    try:
+        vetor_encontrado_str = extrair_vetor(caminho_imagem_temp)
+        if not vetor_encontrado_str:
+            raise HTTPException(status_code=400, detail="Imagem inválida ou não processável.")
+        vetor_encontrado = np.array([float(v) for v in vetor_encontrado_str.split(',')])
+    finally:
+        # Garante que a imagem temporária seja deletada
+        os.remove(caminho_imagem_temp)
+
+    # 3. Busca todos os pets e seus vetores no banco
+    conn = conectar()
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, nome, vetor_iris, dono_id FROM pets")
+    todos_pets = cursor.fetchall()
+    
+    if not todos_pets:
+        conn.close()
+        return {"status": "erro", "mensagem": "Nenhum pet cadastrado no sistema."}
+
+    melhor_pet_encontrado = None
+    maior_similaridade = 0.0
+
+    # 4. Compara o vetor da imagem com todos os vetores do banco
+    for pet in todos_pets:
+        vetor_db = np.array([float(v) for v in pet["vetor_iris"].split(',')])
+        
+        # Cálculo da Similaridade de Cosseno com NumPy
+        dot_product = np.dot(vetor_encontrado, vetor_db)
+        norm_encontrado = np.linalg.norm(vetor_encontrado)
+        norm_db = np.linalg.norm(vetor_db)
+        similaridade = dot_product / (norm_encontrado * norm_db)
+
+        if similaridade > maior_similaridade:
+            maior_similaridade = similaridade
+            melhor_pet_encontrado = pet
+
+    # 5. Verifica se a similaridade ultrapassa um limite de confiança
+    LIMITE_CONFIANCA = 0.85 # Valor entre 0 e 1. Ajuste conforme os testes.
+
+    if maior_similaridade > LIMITE_CONFIANCA:
+        # Busca os dados do dono
+        cursor.execute("SELECT nome, email FROM usuarios WHERE id = ?", (melhor_pet_encontrado["dono_id"],))
+        dono = cursor.fetchone()
+        conn.close()
+
+        return {
+            "status": "ok",
+            "pet_nome": melhor_pet_encontrado["nome"],
+            "confianca": maior_similaridade,
+            "dono": {
+                "nome": dono["nome"],
+                "email": dono["email"]
+            }
+        }
+    else:
+        # Se a maior similaridade for baixa, consideramos que não encontrou
+        conn.close()
+        return {"status": "erro", "mensagem": "Nenhum pet compatível encontrado."}

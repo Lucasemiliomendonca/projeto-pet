@@ -26,6 +26,21 @@ def criar_banco():
         vetor_iris TEXT,
         foto_url TEXT,
         FOREIGN KEY (dono_id) REFERENCES usuarios (id)
+        
+        
+    )
+    """)
+    
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS posts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        usuario_id INTEGER NOT NULL,
+        pet_id INTEGER NOT NULL,
+        imagem_url TEXT NOT NULL,
+        descricao TEXT,
+        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (usuario_id) REFERENCES usuarios (id),
+        FOREIGN KEY (pet_id) REFERENCES pets (id)
     )
     """)
     
