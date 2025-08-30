@@ -1,0 +1,51 @@
+main {
+    width: 100%;
+    max-width: 500px;
+    padding: 2rem 1rem;
+    margin: 0 auto;
+}
+
+.card {
+    background-color: white;
+    padding: 1.5rem;
+    border-radius: var(--border-radius);
+    box-shadow: var(--box-shadow);
+    margin-bottom: 1.5rem;
+}
+
+.card h2 {
+    margin-bottom: 1rem;
+    color: var(--primary-color);
+    text-align: center;
+}
+
+.card form {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.card input, .card button {
+    padding: 0.8rem;
+    border: 1px solid #ccc;
+    border-radius: var(--border-radius);
+    font-size: 1rem;
+}
+
+.card button {
+    font-weight: bold;
+    color: white;
+    background-color: var(--primary-color);
+    border: none;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+}
+
+.card a {
+    color: var(--primary-color);
+    text-decoration: none;
+    margin-top: 1rem;
+    display: block;
+    text-align: center;
+    font-size: 0.9rem;
+}
